@@ -1,205 +1,228 @@
-# Tugas Besar Pemodelan Stokastik  
-## Model Antrian Kantin Rumah Kayu ITERA  
-### Penerapan Proses Poisson, Poisson Non-Homogen, dan Proses Kelahiran-Kematian pada Kasus Riil
+############################################################
+# TUGAS BESAR PEMODELAN STOKASTIK
+# Model Antrian Kantin Rumah Kayu ITERA: M/M/1
+# - Kedatangan ~ Proses Poisson (laju λ)
+# - Pelayanan ~ Eksponensial (laju μ)
+# - Satu kasir  →  Birth–Death Process (M/M/1)
+############################################################
 
-Repository ini berisi implementasi komprehensif Pemodelan Stokastik berdasarkan data nyata jumlah pelanggan di Kantin Rumah Kayu ITERA. Studi ini secara eksplisit menghubungkan materi kuliah dari pertemuan I–XV dengan kasus riil, khususnya:
-
-- **Proses Poisson & Non-Homogen (Pertemuan VI–X)**
-- **Rantai Markov Waktu Kontinu (Pertemuan XI–XII)**
-- **Birth–Death Processes sebagai model antrian M/M/1 dan M/M/s (Pertemuan XI–XII)**
-- **Renewal Phenomena (Pertemuan XIV)**
-- **Implementasi ke Tugas Besar (Pertemuan XV)**
-
-Seluruh kode bersifat **anti-error** karena dataset dimasukkan secara manual ke dalam R script.
-
----
-
-# 1. Judul
-**Model Antrian Kantin Rumah Kayu ITERA Menggunakan Proses Poisson, Poisson Non-Homogen, dan Proses Kelahiran-Kematian**
-
----
-
-# 2. Latar Belakang (Ringkas)
-Kantin Rumah Kayu ITERA merupakan lokasi makan siang utama mahasiswa. Antrean panjang sering terjadi, terutama pada jam sibuk. Selain itu, kondisi cuaca (hujan vs tidak hujan) memengaruhi pola kedatangan mahasiswa.
-
-Materi Pemodelan Stokastik yang dipelajari selama semester memberikan kerangka ilmiah untuk:
-
-- Menganalisis **laju kedatangan (λ)**  
-- Membangun model **antrian M/M/1 dan M/M/s**  
-- Mengidentifikasi stabilitas sistem (ρ)  
-- Memprediksi panjang antrean & waktu tunggu  
-- Menilai dampak *Poisson Non-Homogen* saat hujan  
-
-Tugas Besar ini menggabungkan seluruh konsep tersebut dalam studi nyata.
-
----
-
-# 3. Struktur Dataset
-
-Dataset berisi:
-
-- **Tanggal**
-- **Slot waktu 5 menit**
-- **Jumlah pelanggan yang berhasil membayar**
-- **Kondisi cuaca: Hujan / Tidak Hujan**
-
-Data diringkas menjadi **laju kedatangan per hari** untuk dianalisis dengan model stokastik.
-
----
-
-# 4. Alur Analisis Model Stokastik
-
-## **Langkah 1 — Memasukkan dataset manual (anti-error)**
-```r
 library(tidyverse)
 
-data <- tribble(
-  ~Tanggal, ~Slot, ~Jumlah, ~Kondisi,
-  "11/11/2025","11.50-11.55",6,"Tidak Hujan",
-  ... (data lengkap dimasukkan manual)
+############################################################
+# 1. DATASET MANUAL (ANTI ERROR)
+#    Tanggal, Slot 5 menit, Jumlah ke kasir, Kondisi cuaca
+############################################################
+
+data_raw <- tribble(
+  ~Tanggal,    ~Slot,           ~Jumlah, ~Kondisi,
+  # 11 November 2025 - Tidak Hujan
+  "11/11/2025","11.50-11.55",    6,      "Tidak Hujan",
+  "11/11/2025","11.55-12.00",    7,      "Tidak Hujan",
+  "11/11/2025","12.00-12.05",    12,     "Tidak Hujan",
+  "11/11/2025","12.05-12.10",    14,     "Tidak Hujan",
+  "11/11/2025","12.10-12.15",    8,      "Tidak Hujan",
+  "11/11/2025","12.15-12.20",    9,      "Tidak Hujan",
+  "11/11/2025","12.20-12.25",    9,      "Tidak Hujan",
+  "11/11/2025","12.25-12.30",    7,      "Tidak Hujan",
+  "11/11/2025","12.30-12.35",    13,     "Tidak Hujan",
+  "11/11/2025","12.35-12.40",    11,     "Tidak Hujan",
+  "11/11/2025","12.40-12.45",    9,      "Tidak Hujan",
+  "11/11/2025","12.45-12.50",    7,      "Tidak Hujan",
+
+  # 12 November 2025 - Tidak Hujan
+  "11/12/2025","11.50-11.55",    10,     "Tidak Hujan",
+  "11/12/2025","11.55-12.00",    11,     "Tidak Hujan",
+  "11/12/2025","12.00-12.05",    12,     "Tidak Hujan",
+  "11/12/2025","12.05-12.10",    12,     "Tidak Hujan",
+  "11/12/2025","12.10-12.15",    11,     "Tidak Hujan",
+  "11/12/2025","12.15-12.20",    13,     "Tidak Hujan",
+  "11/12/2025","12.20-12.25",    5,      "Tidak Hujan",
+  "11/12/2025","12.25-12.30",    5,      "Tidak Hujan",
+  "11/12/2025","12.30-12.35",    9,      "Tidak Hujan",
+  "11/12/2025","12.35-12.40",    7,      "Tidak Hujan",
+  "11/12/2025","12.40-12.45",    9,      "Tidak Hujan",
+  "11/12/2025","12.45-12.50",    11,     "Tidak Hujan",
+
+  # 13 November 2025 - Tidak Hujan
+  "11/13/2025","11.50-11.55",    6,      "Tidak Hujan",
+  "11/13/2025","11.55-12.00",    8,      "Tidak Hujan",
+  "11/13/2025","12.00-12.05",    12,     "Tidak Hujan",
+  "11/13/2025","12.05-12.10",    13,     "Tidak Hujan",
+  "11/13/2025","12.10-12.15",    8,      "Tidak Hujan",
+  "11/13/2025","12.15-12.20",    9,      "Tidak Hujan",
+  "11/13/2025","12.20-12.25",    13,     "Tidak Hujan",
+  "11/13/2025","12.25-12.30",    12,     "Tidak Hujan",
+  "11/13/2025","12.30-12.35",    14,     "Tidak Hujan",
+  "11/13/2025","12.35-12.40",    13,     "Tidak Hujan",
+  "11/13/2025","12.40-12.45",    14,     "Tidak Hujan",
+  "11/13/2025","12.45-12.50",    12,     "Tidak Hujan",
+
+  # 19 November 2025 - Tidak Hujan
+  "11/19/2025","11.50-11.55",    8,      "Tidak Hujan",
+  "11/19/2025","11.55-12.00",    8,      "Tidak Hujan",
+  "11/19/2025","12.00-12.05",    4,      "Tidak Hujan",
+  "11/19/2025","12.05-12.10",    7,      "Tidak Hujan",
+  "11/19/2025","12.10-12.15",    16,     "Tidak Hujan",
+  "11/19/2025","12.15-12.20",    11,     "Tidak Hujan",
+  "11/19/2025","12.20-12.25",    12,     "Tidak Hujan",
+  "11/19/2025","12.25-12.30",    12,     "Tidak Hujan",
+  "11/19/2025","12.30-12.35",    7,      "Tidak Hujan",
+  "11/19/2025","12.35-12.40",    13,     "Tidak Hujan",
+  "11/19/2025","12.40-12.45",    14,     "Tidak Hujan",
+  "11/19/2025","12.45-12.50",    3,      "Tidak Hujan",
+
+  # 18 November 2025 - Hujan
+  "11/18/2025","11.50-11.55",    15,     "Hujan",
+  "11/18/2025","11.55-12.00",    4,      "Hujan",
+  "11/18/2025","12.00-12.05",    3,      "Hujan",
+  "11/18/2025","12.05-12.10",    2,      "Hujan",
+  "11/18/2025","12.10-12.15",    2,      "Hujan",
+  "11/18/2025","12.15-12.20",    8,      "Hujan",
+  "11/18/2025","12.20-12.25",    15,     "Hujan",
+  "11/18/2025","12.25-12.30",    12,     "Hujan",
+  "11/18/2025","12.30-12.35",    7,      "Hujan",
+  "11/18/2025","12.35-12.40",    6,      "Hujan",
+  "11/18/2025","12.40-12.45",    7,      "Hujan",
+  "11/18/2025","12.45-12.50",    2,      "Hujan"
 )
-```
 
-## **Langkah 2 — Format tanggal & agregasi**
-```r
-data <- data %>%
-  mutate(Tanggal = as.Date(Tanggal, format="%m/%d/%Y"))
+# Cek singkat
+nrow(data_raw)  # harus 60
+head(data_raw)
+tail(data_raw)
 
-ts_daily <- data %>%
+############################################################
+# 2. RINGKAS PER HARI (TOTAL PELANGGAN / JAM PENGAMATAN)
+############################################################
+
+data_daily <- data_raw %>%
+  mutate(Tanggal = as.Date(Tanggal, format = "%m/%d/%Y")) %>%
   group_by(Tanggal, Kondisi) %>%
-  summarise(total = sum(Jumlah), .groups="drop")
-```
+  summarise(
+    total = sum(Jumlah),      # total pelanggan dalam 1 jam
+    .groups = "drop"
+  )
 
----
+data_daily
 
-# 5. Estimasi Proses Poisson (Pertemuan VI–X)
+############################################################
+# 3. ESTIMASI LAJU KEDATANGAN λ (Poisson) PER KONDISI CUACA
+#    λ di sini = rata-rata jumlah pelanggan per jam
+############################################################
 
-Karena kedatangan pelanggan secara alami acak:
+lambda_by_cond <- data_daily %>%
+  group_by(Kondisi) %>%
+  summarise(
+    lambda = mean(total),          # pelanggan per jam
+    sd_total = sd(total),
+    .groups = "drop"
+  )
 
-- kedatangan per satuan waktu → model **Poisson**  
-- waktu antar kedatangan → berdistribusi **Eksponensial**
+lambda_by_cond
 
-Estimasi λ harian:
-```r
-lambda_daily <- ts_daily %>%
-  mutate(lambda = total / 12)    # 12 interval (5 menit) per jam
-```
+# Simpan ke variabel
+lambda_normal <- lambda_by_cond$lambda[lambda_by_cond$Kondisi == "Tidak Hujan"]
+lambda_hujan  <- lambda_by_cond$lambda[lambda_by_cond$Kondisi == "Hujan"]
 
-### Temuan:
-- λₙₒₙ₋ₕᵤⱼₐₙ ≈ **119 pelanggan/hari**
-- λₕᵤⱼₐₙ ≈ **83 pelanggan/hari**
+lambda_normal
+lambda_hujan
 
-Dampak hujan:  
-\[
-\text{Elastisitas} = \frac{\lambda_\text{hujan} - \lambda_\text{normal}}{\lambda_\text{normal}} \approx -0.3025
-\]
-Hujan menurunkan kedatangan sebesar **30.25%**.
+############################################################
+# 4. FUNGSI M/M/1 (MODEL KELAHIRAN-KEMATIAN)
+#    Input : λ (kedatangan), μ (pelayanan) per jam
+#    Output: ρ, L, Lq, W, Wq
+############################################################
 
----
+mm1_metrics <- function(lambda, mu) {
+  if (lambda >= mu) {
+    stop("Sistem tidak stabil: lambda >= mu. Pilih mu lebih besar dari lambda.")
+  }
+  
+  rho <- lambda / mu                 # tingkat utilisasi
+  L   <- rho / (1 - rho)             # rata-rata pelanggan dalam sistem
+  Lq  <- rho^2 / (1 - rho)           # rata-rata dalam antrian
+  W   <- 1 / (mu - lambda)           # waktu rata-rata dalam sistem (jam)
+  Wq  <- rho / (mu - lambda)         # waktu rata-rata menunggu (jam)
+  
+  tibble(
+    lambda = lambda,
+    mu     = mu,
+    rho    = rho,
+    L      = L,
+    Lq     = Lq,
+    W      = W,
+    Wq     = Wq
+  )
+}
 
-# 6. Poisson Non-Homogen (Pertemuan IX–X)
+############################################################
+# 5. SETTING μ (LAJU PELAYANAN)
+#    Asumsi: satu kasir mampu melayani ~30 pelanggan per jam
+#    → rata-rata 2 menit per transaksi
+############################################################
 
-Hujan menyebabkan perubahan λ secara mendadak → **Poisson Non-Homogen**:
+mu_kasir <- 30   # pelanggan per jam
 
-\[
-\lambda(t) = 
-\begin{cases}
-119, & \text{cuaca normal}\\
-83, & \text{hujan}
-\end{cases}
-\]
+############################################################
+# 6. HITUNG METRIK M/M/1 UNTUK
+#    - KONDISI TIDAK HUJAN
+#    - KONDISI HUJAN
+############################################################
 
-Implikasi:
+mm1_normal <- mm1_metrics(lambda_normal, mu_kasir) %>%
+  mutate(Kondisi = "Tidak Hujan")
 
-- Varians meningkat  
-- Sistem antrean lebih tidak stabil  
-- Service rate μ harus menyesuaikan kondisi
+mm1_hujan <- mm1_metrics(lambda_hujan, mu_kasir) %>%
+  mutate(Kondisi = "Hujan")
 
----
+mm1_compare <- bind_rows(mm1_normal, mm1_hujan) %>%
+  select(Kondisi, everything())
 
-# 7. Proses Kelahiran-Kematian (Pertemuan XI–XII)
+mm1_compare
 
-Sistem antrian:
+############################################################
+# 7. INTERPRETASI ANGKA (DALAM KOMENTAR)
+############################################################
 
-- **Kelahiran = kedatangan pelanggan (λ)**
-- **Kematian = pelanggan selesai dilayani (μ)**
+# - rho (utilisasi) mendekati 1 artinya kasir sangat sibuk.
+#   Jika rho_normal jauh lebih tinggi dari rho_hujan,
+#   berarti saat tidak hujan sistem hampir jenuh.
+#
+# - L  : rata-rata jumlah pelanggan dalam sistem (antri + dilayani)
+# - Lq : rata-rata jumlah yang menunggu dalam antrian
+# - W  : waktu rata-rata pelanggan berada dalam sistem (jam)
+# - Wq : waktu rata-rata hanya menunggu (jam)
+#
+# Untuk mengubah W, Wq ke menit:
+mm1_compare_min <- mm1_compare %>%
+  mutate(
+    W_min  = W  * 60,
+    Wq_min = Wq * 60
+  )
 
-Model dasar:
+mm1_compare_min
 
-### **M/M/1 Model**
-\[
-\rho = \frac{\lambda}{\mu}
-\]
+############################################################
+# 8. VISUALISASI SEDERHANA PERBANDINGAN NORMAL VS HUJAN
+############################################################
 
-### Contoh asumsi μ = 15 transaksi/jam:
+# Barplot utilisasi rho
+ggplot(mm1_compare_min, aes(x = Kondisi, y = rho, fill = Kondisi)) +
+  geom_col(width = 0.6) +
+  ylim(0, 1) +
+  labs(
+    title = "Utilisasi Kasir (ρ) M/M/1\nKantin Rumah Kayu ITERA",
+    x = "Kondisi Cuaca",
+    y = "ρ (lambda / mu)"
+  ) +
+  theme_minimal()
 
-- ρ\_normal ≈ 119/180 ≈ 0.66  
-- ρ\_hujan ≈ 83/180 ≈ 0.46  
-
-Kondisi **tidak hujan** mendekati jenuh pada jam puncak.
-
----
-
-# 8. Analisis Tambahan (Deret Waktu Sederhana)
-
-Digunakan untuk mendukung interpretasi stokastik.
-
-### **Moving Average**
-Menunjukkan tren penurunan menjelang hari hujan.
-
-### **Differencing**
-Perubahan ekstrem: +22 hingga –51 pelanggan.
-
-### **ACF**
-Tidak ada autokorelasi signifikan → **kedatangan independen**  
-→ mendukung asumsi “Poisson Arrival”.
-
----
-
-# 9. Perbandingan Hujan vs Tidak Hujan
-
-| Kondisi | Rata-rata Pelanggan | Dampak |
-|--------|----------------------|--------|
-| Tidak hujan | 119 | Stabil tinggi |
-| Hujan | 83 | –30% kedatangan |
-
----
-
-# 10. Insight & Kebijakan Kampus (High-Impact)
-
-### **1. Membangun Kanopi/Jalur Lindung ke Kantin**
-Mengurangi gangguan hujan → λ meningkat → antrean lebih stabil.
-
-### **2. Menambah 1 Mobile Counter pada Jam Puncak**
-Mengubah sistem dari **M/M/1 → M/M/2**, menurunkan:
-
-- Wq (waktu tunggu)
-- Panjang antrean
-- Probabilitas kekecewaan pelanggan
-
-### **3. Sistem Pre-Order Digital**
-Mengurangi λ\_kasir → meningkatkan stabilitas sistem.
-
-### **4. Dashboard Real-Time untuk Kantin ITERA**
-Pemodelan stokastik dapat:
-
-- memprediksi puncak antrean  
-- memantau utilisasi server (ρ)  
-- menyarankan jumlah tenaga kasir optimal  
-
-### **5. Simulasi Monte Carlo untuk Perencanaan Event**
-Dapat memprediksi kebutuhan staf pada acara besar kampus.
-
----
-
-# 11. Potensi Pengembangan Akademik
-
-- Simulasi **M/G/1** (service time non-eksp.)
-- **CTMC keluarga besar** untuk multi-counter
-- Simulasi **Renewal Theory** untuk periode stok bahan
-- Estimasi **NHPP (Non-Homogeneous Poisson Process)** yang lebih kompleks
-
----
-
-# 12. Lisensi  
-Bebas digunakan untuk keperluan akademik.
+# Barplot waktu tunggu rata-rata dalam menit
+ggplot(mm1_compare_min, aes(x = Kondisi, y = Wq_min, fill = Kondisi)) +
+  geom_col(width = 0.6) +
+  labs(
+    title = "Waktu Tunggu Rata-Rata (Wq) dalam Menit\nModel M/M/1 Kantin",
+    x = "Kondisi Cuaca",
+    y = "Wq (menit)"
+  ) +
+  theme_minimal()
