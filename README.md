@@ -1,227 +1,205 @@
-# Analisis Sistem Antrian Kantin Rumah Kayu ITERA  
-### Pendekatan Pemodelan Stokastik dan Evaluasi Dampak Cuaca terhadap Laju Kedatangan Pelanggan
+# Tugas Besar Pemodelan Stokastik  
+## Model Antrian Kantin Rumah Kayu ITERA  
+### Penerapan Proses Poisson, Poisson Non-Homogen, dan Proses Kelahiran-Kematian pada Kasus Riil
 
-Repositori ini berisi analisis model antrian berdasarkan data nyata Kantin Rumah Kayu ITERA. Analisis dilakukan dengan pendekatan **Pemodelan Stokastik (Proses Poisson, M/M/1, dan respons laju kedatangan)** serta didukung oleh analisis tambahan berupa tren sederhana untuk memperjelas interpretasi.
+Repository ini berisi implementasi komprehensif Pemodelan Stokastik berdasarkan data nyata jumlah pelanggan di Kantin Rumah Kayu ITERA. Studi ini secara eksplisit menghubungkan materi kuliah dari pertemuan I–XV dengan kasus riil, khususnya:
 
-Seluruh analisis menggunakan data yang ditulis manual ke dalam script sehingga **100% anti error** dan tidak bergantung pada file eksternal.
+- **Proses Poisson & Non-Homogen (Pertemuan VI–X)**
+- **Rantai Markov Waktu Kontinu (Pertemuan XI–XII)**
+- **Birth–Death Processes sebagai model antrian M/M/1 dan M/M/s (Pertemuan XI–XII)**
+- **Renewal Phenomena (Pertemuan XIV)**
+- **Implementasi ke Tugas Besar (Pertemuan XV)**
+
+Seluruh kode bersifat **anti-error** karena dataset dimasukkan secara manual ke dalam R script.
 
 ---
 
-# 1. Struktur Dataset  
+# 1. Judul
+**Model Antrian Kantin Rumah Kayu ITERA Menggunakan Proses Poisson, Poisson Non-Homogen, dan Proses Kelahiran-Kematian**
+
+---
+
+# 2. Latar Belakang (Ringkas)
+Kantin Rumah Kayu ITERA merupakan lokasi makan siang utama mahasiswa. Antrean panjang sering terjadi, terutama pada jam sibuk. Selain itu, kondisi cuaca (hujan vs tidak hujan) memengaruhi pola kedatangan mahasiswa.
+
+Materi Pemodelan Stokastik yang dipelajari selama semester memberikan kerangka ilmiah untuk:
+
+- Menganalisis **laju kedatangan (λ)**  
+- Membangun model **antrian M/M/1 dan M/M/s**  
+- Mengidentifikasi stabilitas sistem (ρ)  
+- Memprediksi panjang antrean & waktu tunggu  
+- Menilai dampak *Poisson Non-Homogen* saat hujan  
+
+Tugas Besar ini menggabungkan seluruh konsep tersebut dalam studi nyata.
+
+---
+
+# 3. Struktur Dataset
+
 Dataset berisi:
 
 - **Tanggal**
-- **Slot waktu (5 menit)**
-- **Jumlah pelanggan sukses membayar**
+- **Slot waktu 5 menit**
+- **Jumlah pelanggan yang berhasil membayar**
 - **Kondisi cuaca: Hujan / Tidak Hujan**
 
-Data diringkas menjadi **laju kedatangan per hari (λ)** untuk dianalisis menggunakan teori **antrian stokastik**.
+Data diringkas menjadi **laju kedatangan per hari** untuk dianalisis dengan model stokastik.
 
 ---
 
-# 2. Alur Analisis
+# 4. Alur Analisis Model Stokastik
 
-## Langkah 1 — Membuat dataset manual
+## **Langkah 1 — Memasukkan dataset manual (anti-error)**
 ```r
 library(tidyverse)
 
 data <- tribble(
   ~Tanggal, ~Slot, ~Jumlah, ~Kondisi,
   "11/11/2025","11.50-11.55",6,"Tidak Hujan",
-  ... (seluruh data dimasukkan manual)
+  ... (data lengkap dimasukkan manual)
 )
 ```
 
-## Langkah 2 — Format tanggal & ringkas total per hari
+## **Langkah 2 — Format tanggal & agregasi**
 ```r
-data <- data %>% 
-  mutate(Tanggal = as.Date(Tanggal, format = "%m/%d/%Y"))
+data <- data %>%
+  mutate(Tanggal = as.Date(Tanggal, format="%m/%d/%Y"))
 
 ts_daily <- data %>%
   group_by(Tanggal, Kondisi) %>%
-  summarise(total = sum(Jumlah), .groups = "drop")
+  summarise(total = sum(Jumlah), .groups="drop")
 ```
 
-## Langkah 3 — Estimasi *laju kedatangan λ* harian (Poisson)
-Karena slot waktu = 5 menit:
+---
 
+# 5. Estimasi Proses Poisson (Pertemuan VI–X)
+
+Karena kedatangan pelanggan secara alami acak:
+
+- kedatangan per satuan waktu → model **Poisson**  
+- waktu antar kedatangan → berdistribusi **Eksponensial**
+
+Estimasi λ harian:
 ```r
 lambda_daily <- ts_daily %>%
-  mutate(lambda = total / (12))   # 12 slot per jam (60/5)
+  mutate(lambda = total / 12)    # 12 interval (5 menit) per jam
 ```
 
-## Langkah 4 — Moving Average 3-Hari (untuk membantu interpretasi)
-```r
-library(zoo)
-ts_daily <- ts_daily %>%
-  arrange(Tanggal) %>%
-  mutate(MA_3 = rollmean(total, k=3, fill=NA, align="right"))
-```
+### Temuan:
+- λₙₒₙ₋ₕᵤⱼₐₙ ≈ **119 pelanggan/hari**
+- λₕᵤⱼₐₙ ≈ **83 pelanggan/hari**
 
-## Langkah 5 — Perubahan antar hari (volatilitas antrean)
-```r
-ts_daily <- ts_daily %>%
-  mutate(change = c(NA, diff(total)))
-```
-
-## Langkah 6 — Autocorrelation (ACF)
-```r
-acf(ts(ts_daily$total, frequency = 1))
-```
-
-## Langkah 7 — Dampak Cuaca terhadap Kedatangan (Elastisitas Stokastik)
-```r
-D_normal <- mean(ts_daily$total[ts_daily$Kondisi == "Tidak Hujan"])
-D_hujan  <- mean(ts_daily$total[ts_daily$Kondisi == "Hujan"])
-
-elasticity <- (D_hujan - D_normal) / D_normal
-```
+Dampak hujan:  
+\[
+\text{Elastisitas} = \frac{\lambda_\text{hujan} - \lambda_\text{normal}}{\lambda_\text{normal}} \approx -0.3025
+\]
+Hujan menurunkan kedatangan sebesar **30.25%**.
 
 ---
 
-# 3. Visualisasi  
-Visualisasi eksplorasi:
+# 6. Poisson Non-Homogen (Pertemuan IX–X)
 
-- Deret waktu total pelanggan (`output_ts1.png`)
-- Moving Average 3-Hari (`output_ma.png`)
-- Perubahan antar hari (`output_change.png`)
-- ACF (`output_acf.png`)
-- Perbandingan hujan vs tidak hujan (`output_compare.png`)
+Hujan menyebabkan perubahan λ secara mendadak → **Poisson Non-Homogen**:
 
----
+\[
+\lambda(t) = 
+\begin{cases}
+119, & \text{cuaca normal}\\
+83, & \text{hujan}
+\end{cases}
+\]
 
-# 4. Insight Utama Berdasarkan Pemodelan Stokastik
+Implikasi:
 
-### **1. Laju kedatangan (λ) hari hujan turun drastis**
-- λ\_tidak\_hujan ≈ **119 pelanggan/hari**
-- λ\_hujan ≈ **83 pelanggan/hari**
-- Turun **30.25%**
-
-Dalam konteks **Sistem Antrian M/M/1 atau M/M/s**, penurunan λ sebesar ini:
-
-- Mengurangi panjang antrean
-- Mengurangi waktu tunggu rata-rata
-- Berdampak pada pemanfaatan server (ρ = λ / μ)
-
-Ini berarti **cuaca adalah variabel stokastik penting** dalam model antrian kampus.
+- Varians meningkat  
+- Sistem antrean lebih tidak stabil  
+- Service rate μ harus menyesuaikan kondisi
 
 ---
 
-### **2. Sistem antrian bersifat *independent day-to-day***
-ACF tidak menunjukkan autokorelasi signifikan:
+# 7. Proses Kelahiran-Kematian (Pertemuan XI–XII)
 
-- Tidak ada “pola minggu”
-- Tidak ada ketergantungan hari sebelumnya
-- Cocok dengan model **kedatangan Poisson** (asumsi utama M/M/1)
+Sistem antrian:
 
-Ini mendukung pemilihan model stokastik **Poisson Arrival Process**.
+- **Kelahiran = kedatangan pelanggan (λ)**
+- **Kematian = pelanggan selesai dilayani (μ)**
 
----
+Model dasar:
 
-### **3. Hari hampir jenuh terjadi pada kondisi tidak hujan**
-Dengan estimasi kecepatan layanan (μ) kasir kampus:
+### **M/M/1 Model**
+\[
+\rho = \frac{\lambda}{\mu}
+\]
 
-- Jika μ ≈ 15 transaksi/jam, λ ≈ 12–18 slot/jam  
-- Maka ρ = λ/μ dapat mendekati atau melewati **0.9** pada jam sibuk  
-- Ini mendekati kondisi **tidak stabil** pada teori antrian
+### Contoh asumsi μ = 15 transaksi/jam:
 
-Artinya sistem **rentan macet**, terutama saat tidak hujan.
+- ρ\_normal ≈ 119/180 ≈ 0.66  
+- ρ\_hujan ≈ 83/180 ≈ 0.46  
 
----
-
-### **4. Moving Average mengungkap tren penurunan λ**
-Tren jangka pendek menurun mendekati tanggal 18–19:
-
-- Hujan mengganggu pola normal
-- Stok makanan perlu menyesuaikan kondisi cuaca
+Kondisi **tidak hujan** mendekati jenuh pada jam puncak.
 
 ---
 
-### **5. Volatilitas harian cukup besar**
-Perubahan antar hari menembus:
+# 8. Analisis Tambahan (Deret Waktu Sederhana)
 
-- +22 (lonjakan)
-- –51 (penurunan tajam)
+Digunakan untuk mendukung interpretasi stokastik.
 
-Untuk model stokastik, ini berarti variabilitas tinggi → *lebih cocok M/M/s daripada M/M/1 pada jam puncak*.
+### **Moving Average**
+Menunjukkan tren penurunan menjelang hari hujan.
 
----
+### **Differencing**
+Perubahan ekstrem: +22 hingga –51 pelanggan.
 
-# 5. Rekomendasi Kebijakan Kampus (Insight Tingkat Rektor)
-
-### **A. Pembangunan Kanopi/Jalur Lindung Menuju Kantin**
-Dampak hujan = penurunan 30%.  
-Ini adalah **loss ekonomi signifikan** untuk UMKM.
-
-Kebijakan:
-
-- Bangun jalur tertutup menuju kantin  
-- Sediakan halte kecil & shading  
-
-Hasil yang diharapkan:
-
-- λ saat hujan meningkat  
-- Pendapatan UMKM stabil  
-- Mahasiswa tidak menumpuk di gedung lain  
-- Mempercepat antrean karena distribusi kedatangan lebih merata
+### **ACF**
+Tidak ada autokorelasi signifikan → **kedatangan independen**  
+→ mendukung asumsi “Poisson Arrival”.
 
 ---
 
-### **B. Tambah 1 Kasir Mobil (Mobile Counter) saat Jam Sibuk**
-Karena ρ tinggi, sistem mendekati kondisi jenuh.
+# 9. Perbandingan Hujan vs Tidak Hujan
 
-Kebijakan:
-
-- Sediakan *kasir tambahan temporer*  
-- Berlaku hanya 11.30–12.45
-
-Bukti stokastik:
-- penambahan server mengubah model dari **M/M/1 → M/M/2**
-- Wq turun drastis:  
-  \[
-  W_q \sim \frac{\rho^{2}}{\mu(1-\rho)} \quad \text{turun signifikan}
-  \]
+| Kondisi | Rata-rata Pelanggan | Dampak |
+|--------|----------------------|--------|
+| Tidak hujan | 119 | Stabil tinggi |
+| Hujan | 83 | –30% kedatangan |
 
 ---
 
-### **C. Sistem Pre-Order / QR Pay untuk Menurunkan λ Aksi**
-Jika sebagian transaksi dipindah ke:
+# 10. Insight & Kebijakan Kampus (High-Impact)
 
-- Pre-order
-- Mobile ordering
-- Pembayaran digital mandiri
+### **1. Membangun Kanopi/Jalur Lindung ke Kantin**
+Mengurangi gangguan hujan → λ meningkat → antrean lebih stabil.
 
-Maka:
+### **2. Menambah 1 Mobile Counter pada Jam Puncak**
+Mengubah sistem dari **M/M/1 → M/M/2**, menurunkan:
 
-- λ kasir turun → antrean memendek  
-- Variabilitas (var λ) lebih kecil  
-- Sistem lebih mendekati kondisi stabil M/M/2
+- Wq (waktu tunggu)
+- Panjang antrean
+- Probabilitas kekecewaan pelanggan
 
----
+### **3. Sistem Pre-Order Digital**
+Mengurangi λ\_kasir → meningkatkan stabilitas sistem.
 
-### **D. Dashboard Pemodelan Stokastik di Kantin ITERA**
-Manfaat:
+### **4. Dashboard Real-Time untuk Kantin ITERA**
+Pemodelan stokastik dapat:
 
-- Prediksi jumlah pelanggan harian  
-- Prediksi waktu jenuh  
-- Estimasi panjang antrean real-time  
+- memprediksi puncak antrean  
+- memantau utilisasi server (ρ)  
+- menyarankan jumlah tenaga kasir optimal  
 
-Ini dapat menjadi **pilot project transformasi digital UMKM kampus**.
-
----
-
-# 6. Pengembangan Sistem Antrian Kampus ke Depan
-
-Beberapa potensi penelitian lanjutan:
-
-1. **Model M/M/s dengan server berkapasitas berbeda**
-2. **Model M/G/1 bila distribusi service time tidak eksponensial**
-3. **Simulasi Monte Carlo untuk prediksi antrean saat event kampus**
-4. **Agent-based simulation (Simmer R package)**
-5. **Optimasi jumlah server minimal dengan SLA waktu tunggu**
+### **5. Simulasi Monte Carlo untuk Perencanaan Event**
+Dapat memprediksi kebutuhan staf pada acara besar kampus.
 
 ---
 
-# 7. Lisensi  
-Bebas digunakan untuk kepentingan akademik.
+# 11. Potensi Pengembangan Akademik
 
+- Simulasi **M/G/1** (service time non-eksp.)
+- **CTMC keluarga besar** untuk multi-counter
+- Simulasi **Renewal Theory** untuk periode stok bahan
+- Estimasi **NHPP (Non-Homogeneous Poisson Process)** yang lebih kompleks
+
+---
+
+# 12. Lisensi  
+Bebas digunakan untuk keperluan akademik.
